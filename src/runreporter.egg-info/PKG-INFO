@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: runreporter
-Version: 0.1.0
+Version: 0.1.1
 Summary: Library for logging runtime errors and sending execution reports via Telegram and Email
 Author: nosikmov
 Requires-Python: >=3.9
@@ -21,13 +21,13 @@ Requires-Dist: requests>=2.31.0
 ## Установка
 
 ```bash
-pip install .
+pip install runreporter
 ```
 
 ## Пример использования
 
 ```python
-from error_manager import ErrorManager, SmtpConfig
+from runreporter import ErrorManager, SmtpConfig
 
 manager = ErrorManager(
     log_file_path="app.log",

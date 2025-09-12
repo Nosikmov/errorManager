@@ -1,11 +1,11 @@
 README.md
 pyproject.toml
-src/error_manager/__init__.py
-src/error_manager/email_config.py
-src/error_manager/logger.py
-src/error_manager/manager.py
-src/error_manager/report.py
-src/error_manager/transports.py
+src/runreporter/__init__.py
+src/runreporter/email_config.py
+src/runreporter/logger.py
+src/runreporter/manager.py
+src/runreporter/report.py
+src/runreporter/transports.py
 src/runreporter.egg-info/PKG-INFO
 src/runreporter.egg-info/SOURCES.txt
 src/runreporter.egg-info/dependency_links.txt
