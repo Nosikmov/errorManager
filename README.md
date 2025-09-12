@@ -12,7 +12,7 @@
 ## Установка
 
 ```bash
-pip install .
+pip install runreporter
 ```
 
 ## Пример использования
