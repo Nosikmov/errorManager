@@ -12,11 +12,12 @@
 ## Установка
 
 ```bash
-pip install runreporter
+pip install .
 ```
 
-## Пример использования
+## Примеры использования
 
+### Вариант 1: через контекстный менеджер (with)
 ```python
 from runreporter import ErrorManager, SmtpConfig
 
@@ -41,6 +42,39 @@ with manager.context(run_name="Ежедневный импорт") as log:
     log.info("Начало работы")
     # ваш код
     log.error("Ошибка обработки записи id=42")
+```
+
+### Вариант 2: без with (явный старт и финиш)
+```python
+from runreporter import ErrorManager, SmtpConfig
+
+manager = ErrorManager(
+    log_file_path="app.log",
+    telegram_bot_token="123:ABC",
+    telegram_chat_ids=[11111111],
+    smtp_config=SmtpConfig(
+        host="smtp.example.com",
+        port=465,
+        username="user@example.com",
+        password="pass",
+        use_ssl=True,
+    ),
+    email_recipients=["dev@example.com"],
+    send_reports_without_errors=False,
+    primary_channel="email",
+)
+
+log = manager.get_logger(run_name="Ночной job")
+
+try:
+    log.info("Старт job")
+    # ваш код
+    raise RuntimeError("Пример ошибки")
+except Exception:
+    log.exception("Произошло исключение")
+finally:
+    # В конце выполнения явно инициируем отправку отчета
+    manager.send_report()  # можно передать run_name вручную: manager.send_report("Ночной job")
 ```
 
 ## Конфигурация

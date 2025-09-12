@@ -24,7 +24,7 @@ class ErrorManager:
 		email_recipients: Optional[Iterable[str]] = None,
 		send_reports_without_errors: bool = False,
 		primary_channel: str = PRIMARY_TELEGRAM,
-		logger_name: str = "error_manager",
+		logger_name: str = "runreporter",
 		log_level: int = logging.INFO,
 	) -> None:
 		self.log_file_path = log_file_path
@@ -33,29 +33,21 @@ class ErrorManager:
 		self.mail = EmailTransport(smtp_config, email_recipients)
 		self.send_reports_without_errors = send_reports_without_errors
 		self.primary_channel = primary_channel.lower()
+		self._active_run_name: Optional[str] = None
 
 	def get_logger(self, run_name: Optional[str] = None) -> ErrorTrackingLogger:
-        """
-        Вернёт логгер для использования без контекстного менеджера.
-        run_name можно передать здесь (также можно передать в send_report()).
-        """
-        self._active_run_name = run_name  # опционально «запомнить» название прогона
-        return self.logger
+		self._active_run_name = run_name
+		return self.logger
 
-    def send_report(self, run_name: Optional[str] = None) -> Tuple[bool, bool]:
-        """
-        Явно отправляет отчёт. Вызывает _send_report() только если были ошибки,
-        либо включён флаг send_reports_without_errors.
-        Возвращает кортеж (sent_tg, sent_mail).
-        """
-        try:
-            if self.logger.had_error or self.send_reports_without_errors:
-                return self._send_report(run_name=run_name or getattr(self, "_active_run_name", None))
-            return (False, False)
-        except Exception as report_exc:
-            logging.getLogger("error_manager.internal").error(f"Ошибка отправки отчета: {report_exc}")
-            return (False, False)
-			
+	def send_report(self, run_name: Optional[str] = None) -> Tuple[bool, bool]:
+		try:
+			if self.logger.had_error or self.send_reports_without_errors:
+				return self._send_report(run_name=run_name or self._active_run_name)
+			return (False, False)
+		except Exception as report_exc:
+			logging.getLogger("runreporter.internal").error(f"Ошибка отправки отчета: {report_exc}")
+			return (False, False)
+
 	def _send_report(self, run_name: Optional[str]) -> Tuple[bool, bool]:
 		log_tail = read_log_tail(self.log_file_path)
 		summary = RunSummary(
@@ -115,4 +107,4 @@ class ErrorManager:
 					self._send_report(run_name=run_name)
 			except Exception as report_exc:
 				# Avoid crashing the app due to reporting issues
-				logging.getLogger("error_manager.internal").error(f"Ошибка отправки отчета: {report_exc}")
+				logging.getLogger("runreporter.internal").error(f"Ошибка отправки отчета: {report_exc}")
