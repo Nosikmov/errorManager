@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "error-manager"
+name = "runreporter"
 version = "0.1.0"
 description = "Library for logging runtime errors and sending execution reports via Telegram and Email"
 authors = [{ name = "nosikmov" }]
