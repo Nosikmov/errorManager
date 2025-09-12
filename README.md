@@ -18,7 +18,7 @@ pip install .
 ## Пример использования
 
 ```python
-from error_manager import ErrorManager, SmtpConfig
+from runreporter import ErrorManager, SmtpConfig
 
 manager = ErrorManager(
     log_file_path="app.log",
