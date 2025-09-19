@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from typing import Iterable, Optional, Tuple
 
 from .email_config import SmtpConfig
-from .logger import ErrorTrackingLogger, create_file_logger
+from .logger import ErrorTrackingLogger, create_file_logger, set_global_logger
 from .report import RunSummary, read_log_tail, build_report_text, build_log_attachment_bytes
 from .transports import TelegramTransport, EmailTransport
 
@@ -29,6 +29,7 @@ class ErrorManager:
 	) -> None:
 		self.log_file_path = log_file_path
 		self.logger = create_file_logger(logger_name, log_file_path, level=log_level)
+		set_global_logger(self.logger)
 		self.tg = TelegramTransport(telegram_bot_token, telegram_chat_ids)
 		self.mail = EmailTransport(smtp_config, email_recipients)
 		self.send_reports_without_errors = send_reports_without_errors
@@ -38,6 +39,11 @@ class ErrorManager:
 	def get_logger(self, run_name: Optional[str] = None) -> ErrorTrackingLogger:
 		self._active_run_name = run_name
 		return self.logger
+
+	@contextmanager
+	def error_context(self, name: str):
+		with self.logger.context(name) as _:
+			yield self.logger
 
 	def send_report(self, run_name: Optional[str] = None) -> Tuple[bool, bool]:
 		try:

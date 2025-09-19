@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: runreporter
-Version: 0.2.0
+Version: 0.2.1
 Summary: Library for logging runtime errors and sending execution reports via Telegram and Email
 Author: nosikmov
 Requires-Python: >=3.9
@@ -82,8 +82,18 @@ try:
 except Exception:
     log.exception("Произошло исключение")
 finally:
-    # В конце выполнения явно инициируем отправку отчета
-    manager.send_report()  # можно передать run_name вручную: manager.send_report("Ночной job")
+    manager.send_report()  # можно передать run_name вручную
+```
+
+### Вариант 3: локальный контекст сообщений
+```python
+log = manager.get_logger(run_name="ETL")
+
+log.info("Подготовка")
+with manager.error_context("Загрузка CSV"):
+    log.info("Читаю файл")
+    log.error("Ошибка парсинга")  # сообщение будет помечено как [ETL > Загрузка CSV]
+log.info("Финиш")
 ```
 
 ## Конфигурация
