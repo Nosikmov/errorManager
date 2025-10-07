@@ -12,4 +12,4 @@ __all__ = [
 	"ComponentLogger",
 ]
 
-__version__ = "0.3"
+__version__ = "0.3.1"
