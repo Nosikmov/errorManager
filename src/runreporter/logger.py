@@ -83,16 +83,80 @@ class ErrorTrackingLogger:
 		finally:
 			self._context_stack.pop()
 
-	def with_component(self, name: str) -> "ComponentLogger":
-		"""Создать логгер с префиксом компонента.
+	def with_permanent_context(self, context_name: str) -> "PermanentContextLogger":
+		"""Создать логгер с постоянным контекстом.
+		
+		Все сообщения будут автоматически помечены указанным контекстом.
 		
 		Args:
-			name: Имя компонента для префикса сообщений
+			context_name: Имя контекста для постоянной пометки сообщений
 			
 		Returns:
-			ComponentLogger: Логгер с префиксом компонента
+			PermanentContextLogger: Логгер с постоянным контекстом
 		"""
-		return ComponentLogger(self, name)
+		return PermanentContextLogger(self, context_name)
+
+
+class PermanentContextLogger:
+	"""Логгер с постоянным контекстом модуля.
+	
+	Все сообщения автоматически помечаются указанным контекстом.
+	"""
+
+	def __init__(self, base: ErrorTrackingLogger, context_name: str) -> None:
+		"""Инициализация логгера с постоянным контекстом.
+		
+		Args:
+			base: Базовый логгер с отслеживанием ошибок
+			context_name: Имя контекста для постоянной пометки
+		"""
+		self._base = base
+		self._context = str(context_name)
+
+	@property
+	def had_error(self) -> bool:
+		"""Проверить, были ли зафиксированы ошибки в базовом логгере.
+		
+		Returns:
+			bool: True если были ошибки, False иначе
+		"""
+		return self._base.had_error
+
+	def _p(self, msg: str) -> str:
+		return f"[{self._context}] {msg}"
+
+	def debug(self, msg: str, *args, **kwargs) -> None:
+		self._base.debug(self._p(msg), *args, **kwargs)
+
+	def info(self, msg: str, *args, **kwargs) -> None:
+		self._base.info(self._p(msg), *args, **kwargs)
+
+	def warning(self, msg: str, *args, **kwargs) -> None:
+		self._base.warning(self._p(msg), *args, **kwargs)
+
+	def error(self, msg: str, *args, **kwargs) -> None:
+		self._base.error(self._p(msg), *args, **kwargs)
+
+	def exception(self, msg: str, *args, **kwargs) -> None:
+		self._base.exception(self._p(msg), *args, **kwargs)
+
+	def critical(self, msg: str, *args, **kwargs) -> None:
+		self._base.critical(self._p(msg), *args, **kwargs)
+
+	@contextmanager
+	def context(self, name: str):
+		"""Контекстный менеджер для дополнительных контекстов.
+		
+		Сообщения будут помечены как [ModuleContext > AdditionalContext].
+		
+		Args:
+			name: Имя дополнительного контекста
+			
+		Yields:
+			PermanentContextLogger: Текущий логгер с дополнительным контекстом
+		"""
+		with self._base.context(f"{self._context} > {name}") as _:
+			yield self
 
 
 class ComponentLogger:

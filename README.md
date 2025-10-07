@@ -98,7 +98,7 @@ with manager.error_context("Загрузка CSV"):
 log.info("Финиш")
 ```
 
-### Вариант 4: централизованная конфигурация с модульными логгерами
+### Вариант 4: централизованная конфигурация с постоянными контекстами модулей
 ```python
 # config.py - центральный файл конфигурации
 from runreporter import ErrorManager, SmtpConfig, NotificationUser
@@ -130,18 +130,26 @@ app_logger = manager.get_logger(run_name="MainApp")
 # service_a.py - модуль A
 from config import app_logger
 
+# Создаем логгер с постоянным контекстом модуля
+log = app_logger.with_permanent_context("ServiceA")
+
 def process_data():
-    with app_logger.context("ServiceA"):
-        app_logger.info("Начало обработки данных")  # [ServiceA] Начало обработки данных
-        app_logger.error("Ошибка валидации")        # [ServiceA] Ошибка валидации
+    log.info("Начало обработки данных")  # [ServiceA] Начало обработки данных
+    log.error("Ошибка валидации")        # [ServiceA] Ошибка валидации
+    
+    # Можно добавить дополнительный контекст
+    with log.context("Валидация"):
+        log.info("Проверка данных")      # [ServiceA > Валидация] Проверка данных
 
 # service_b.py - модуль B  
 from config import app_logger
 
+# Создаем логгер с постоянным контекстом модуля
+log = app_logger.with_permanent_context("ServiceB")
+
 def send_notification():
-    with app_logger.context("ServiceB"):
-        app_logger.info("Отправка уведомления")     # [ServiceB] Отправка уведомления
-        app_logger.warning("Медленный ответ API")   # [ServiceB] Медленный ответ API
+    log.info("Отправка уведомления")     # [ServiceB] Отправка уведомления
+    log.warning("Медленный ответ API")   # [ServiceB] Медленный ответ API
 
 # main.py - основной файл
 from config import app_logger
@@ -155,7 +163,7 @@ with app_logger.context("Запуск приложения"):
     app_logger.info("Завершение работы")
 ```
 
-### Вариант 5: внедрение зависимостей (DI) с централизованной конфигурацией
+### Вариант 5: внедрение зависимостей (DI) с постоянными контекстами
 ```python
 # config.py - центральный файл конфигурации
 from runreporter import ErrorManager, SmtpConfig, NotificationUser
@@ -171,14 +179,14 @@ from config import app_logger
 
 class Worker:
     def __init__(self) -> None:
-        pass
+        # Создаем логгер с постоянным контекстом класса
+        self.log = app_logger.with_permanent_context("Worker")
 
     def run(self) -> None:
-        with app_logger.context("Worker"):
-            app_logger.info("Старт работы")  # [Worker] Старт работы
-            with app_logger.context("Обработка данных"):
-                app_logger.info("Читаю файл")    # [Worker > Обработка данных] Читаю файл
-                app_logger.error("Ошибка парсинга")  # [Worker > Обработка данных] Ошибка парсинга
+        self.log.info("Старт работы")  # [Worker] Старт работы
+        with self.log.context("Обработка данных"):
+            self.log.info("Читаю файл")    # [Worker > Обработка данных] Читаю файл
+            self.log.error("Ошибка парсинга")  # [Worker > Обработка данных] Ошибка парсинга
 
 # main.py - основной файл
 from config import app_logger
