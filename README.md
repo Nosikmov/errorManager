@@ -128,25 +128,20 @@ manager = ErrorManager(
 app_logger = manager.get_logger(run_name="MainApp")
 
 # service_a.py - модуль A
-from runreporter import get_logger_for
 from config import app_logger
 
-# Создаем логгер с контекстом модуля
-log = get_logger_for("ServiceA")
-
 def process_data():
-    log.info("Начало обработки данных")  # [ServiceA] Начало обработки данных
-    log.error("Ошибка валидации")        # [ServiceA] Ошибка валидации
+    with app_logger.context("ServiceA"):
+        app_logger.info("Начало обработки данных")  # [ServiceA] Начало обработки данных
+        app_logger.error("Ошибка валидации")        # [ServiceA] Ошибка валидации
 
 # service_b.py - модуль B  
-from runreporter import get_logger_for
-
-# Создаем логгер с контекстом модуля
-log = get_logger_for("ServiceB")
+from config import app_logger
 
 def send_notification():
-    log.info("Отправка уведомления")     # [ServiceB] Отправка уведомления
-    log.warning("Медленный ответ API")   # [ServiceB] Медленный ответ API
+    with app_logger.context("ServiceB"):
+        app_logger.info("Отправка уведомления")     # [ServiceB] Отправка уведомления
+        app_logger.warning("Медленный ответ API")   # [ServiceB] Медленный ответ API
 
 # main.py - основной файл
 from config import app_logger
@@ -172,26 +167,24 @@ manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp", users=
 app_logger = manager.get_logger(run_name="MainApp")
 
 # mymodule.py - модуль с DI
-from runreporter import ComponentLogger
+from config import app_logger
 
 class Worker:
-    def __init__(self, log: ComponentLogger) -> None:
-        self.log = log
+    def __init__(self) -> None:
+        pass
 
     def run(self) -> None:
-        self.log.info("Старт работы")  # [Worker] Старт работы
-        with self.log.context("Обработка данных"):
-            self.log.info("Читаю файл")    # [Worker > Обработка данных] Читаю файл
-            self.log.error("Ошибка парсинга")  # [Worker > Обработка данных] Ошибка парсинга
+        with app_logger.context("Worker"):
+            app_logger.info("Старт работы")  # [Worker] Старт работы
+            with app_logger.context("Обработка данных"):
+                app_logger.info("Читаю файл")    # [Worker > Обработка данных] Читаю файл
+                app_logger.error("Ошибка парсинга")  # [Worker > Обработка данных] Ошибка парсинга
 
 # main.py - основной файл
-from runreporter import get_logger_for
 from config import app_logger
 from mymodule import Worker
 
-# Создаем логгер для Worker с контекстом модуля
-worker_logger = get_logger_for("Worker")
-worker = Worker(worker_logger)
+worker = Worker()
 
 with app_logger.context("Запуск приложения"):
     app_logger.info("Инициализация системы")
