@@ -98,38 +98,80 @@ with manager.error_context("Загрузка CSV"):
 log.info("Финиш")
 ```
 
-### Вариант 4: общий логгер из разных модулей (без передачи экземпляра)
+### Вариант 4: централизованная конфигурация с модульными логгерами
 ```python
-# main.py
-from runreporter import ErrorManager, NotificationUser
-users = [NotificationUser(name="admin", telegram_chat_id=11111111)]
-manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp", users=users)
+# config.py - центральный файл конфигурации
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
 
-# service_a.py
+users = [
+    NotificationUser(name="admin", telegram_chat_id=11111111, email="admin@example.com"),
+    NotificationUser(name="dev1", telegram_chat_id=22222222),
+]
+
+manager = ErrorManager(
+    log_file_path="logs/app.log",
+    logger_name="myapp",
+    telegram_bot_token="123:ABC",
+    users=users,
+    smtp_config=SmtpConfig(
+        host="smtp.example.com",
+        port=465,
+        username="user@example.com",
+        password="pass",
+        use_ssl=True,
+    ),
+    send_reports_without_errors=False,
+    primary_channel="telegram",
+)
+
+# Экспортируем настроенный логгер для использования в модулях
+app_logger = manager.get_logger(run_name="MainApp")
+
+# service_a.py - модуль A
 from runreporter import get_logger_for
+from config import app_logger
+
+# Создаем логгер с контекстом модуля
 log = get_logger_for("ServiceA")
-log.info("Запуск")  # [ServiceA] ...
 
-# service_b.py
+def process_data():
+    log.info("Начало обработки данных")  # [ServiceA] Начало обработки данных
+    log.error("Ошибка валидации")        # [ServiceA] Ошибка валидации
+
+# service_b.py - модуль B  
 from runreporter import get_logger_for
+
+# Создаем логгер с контекстом модуля
 log = get_logger_for("ServiceB")
-log.error("Ошибка")  # [ServiceB] ...
+
+def send_notification():
+    log.info("Отправка уведомления")     # [ServiceB] Отправка уведомления
+    log.warning("Медленный ответ API")   # [ServiceB] Медленный ответ API
+
+# main.py - основной файл
+from config import app_logger
+from service_a import process_data
+from service_b import send_notification
+
+with app_logger.context("Запуск приложения"):
+    app_logger.info("Старт системы")
+    process_data()
+    send_notification()
+    app_logger.info("Завершение работы")
 ```
 
-### Вариант 5: общий логгер через внедрение зависимостей (DI)
+### Вариант 5: внедрение зависимостей (DI) с централизованной конфигурацией
 ```python
-# main.py
-from runreporter import ErrorManager, NotificationUser
+# config.py - центральный файл конфигурации
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
+
 users = [NotificationUser(name="admin", telegram_chat_id=11111111)]
 manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp", users=users)
 
-from runreporter import get_logger_for
-from mymodule import Worker
+# Экспортируем настроенный логгер
+app_logger = manager.get_logger(run_name="MainApp")
 
-worker = Worker(get_logger_for("Worker"))
-worker.run()
-
-# mymodule.py
+# mymodule.py - модуль с DI
 from runreporter import ComponentLogger
 
 class Worker:
@@ -137,7 +179,24 @@ class Worker:
         self.log = log
 
     def run(self) -> None:
-        self.log.info("Старт")
+        self.log.info("Старт работы")  # [Worker] Старт работы
+        with self.log.context("Обработка данных"):
+            self.log.info("Читаю файл")    # [Worker > Обработка данных] Читаю файл
+            self.log.error("Ошибка парсинга")  # [Worker > Обработка данных] Ошибка парсинга
+
+# main.py - основной файл
+from runreporter import get_logger_for
+from config import app_logger
+from mymodule import Worker
+
+# Создаем логгер для Worker с контекстом модуля
+worker_logger = get_logger_for("Worker")
+worker = Worker(worker_logger)
+
+with app_logger.context("Запуск приложения"):
+    app_logger.info("Инициализация системы")
+    worker.run()
+    app_logger.info("Завершение работы")
 ```
 
 ## Конфигурация пользователей
