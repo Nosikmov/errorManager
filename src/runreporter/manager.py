@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from typing import Iterable, Optional, Tuple
 
-from .email_config import SmtpConfig
+from .email_config import SmtpConfig, NotificationUser
 from .logger import ErrorTrackingLogger, create_file_logger, set_global_logger
 from .report import RunSummary, read_log_tail, build_report_text, build_log_attachment_bytes
 from .transports import TelegramTransport, EmailTransport
@@ -15,37 +15,83 @@ PRIMARY_EMAIL = "email"
 
 
 class ErrorManager:
+	"""Основной класс для управления логированием и отправкой отчетов.
+	
+	Создает файловый логгер, настраивает транспорты (Telegram/Email) и предоставляет
+	методы для контекстного логирования и отправки отчетов по завершению работы.
+	"""
+	
 	def __init__(
 		self,
 		log_file_path: str,
 		telegram_bot_token: Optional[str] = None,
-		telegram_chat_ids: Optional[Iterable[int]] = None,
+		users: Optional[Iterable[NotificationUser]] = None,
 		smtp_config: Optional[SmtpConfig] = None,
-		email_recipients: Optional[Iterable[str]] = None,
 		send_reports_without_errors: bool = False,
 		primary_channel: str = PRIMARY_TELEGRAM,
-		logger_name: str = "runreporter",
+		logger_name: str = "app",
 		log_level: int = logging.INFO,
 	) -> None:
+		"""Инициализация менеджера ошибок.
+		
+		Args:
+			log_file_path: Путь к файлу лога (папка создается автоматически)
+			telegram_bot_token: Токен бота Telegram для отправки отчетов
+			users: Список пользователей для получения уведомлений
+			smtp_config: Конфигурация SMTP для отправки email
+			send_reports_without_errors: Отправлять ли отчеты при отсутствии ошибок
+			primary_channel: Приоритетный канал ("telegram" или "email")
+			logger_name: Имя логгера в записях лога
+			log_level: Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+		"""
 		self.log_file_path = log_file_path
 		self.logger = create_file_logger(logger_name, log_file_path, level=log_level)
 		set_global_logger(self.logger)
-		self.tg = TelegramTransport(telegram_bot_token, telegram_chat_ids)
-		self.mail = EmailTransport(smtp_config, email_recipients)
+		self.tg = TelegramTransport(telegram_bot_token, users)
+		self.mail = EmailTransport(smtp_config, users)
 		self.send_reports_without_errors = send_reports_without_errors
 		self.primary_channel = primary_channel.lower()
 		self._active_run_name: Optional[str] = None
 
 	def get_logger(self, run_name: Optional[str] = None) -> ErrorTrackingLogger:
+		"""Получить логгер для записи сообщений.
+		
+		Args:
+			run_name: Имя текущего запуска (используется в отчетах)
+			
+		Returns:
+			ErrorTrackingLogger: Логгер с отслеживанием ошибок
+		"""
 		self._active_run_name = run_name
 		return self.logger
 
 	@contextmanager
 	def error_context(self, name: str):
+		"""Контекстный менеджер для пометки сообщений лога.
+		
+		Все сообщения внутри блока будут помечены указанным контекстом.
+		
+		Args:
+			name: Имя контекста для пометки сообщений
+			
+		Yields:
+			ErrorTrackingLogger: Логгер с активным контекстом
+		"""
 		with self.logger.context(name) as _:
 			yield self.logger
 
 	def send_report(self, run_name: Optional[str] = None) -> Tuple[bool, bool]:
+		"""Отправить отчет о выполнении.
+		
+		Создает отчет с последними 300 строками лога и отправляет через настроенные
+		транспорты (Telegram/Email) согласно приоритету каналов.
+		
+		Args:
+			run_name: Имя запуска для отчета (если None, используется активное)
+			
+		Returns:
+			Tuple[bool, bool]: (отправлено_в_telegram, отправлено_на_email)
+		"""
 		try:
 			if self.logger.had_error or self.send_reports_without_errors:
 				return self._send_report(run_name=run_name or self._active_run_name)
@@ -102,6 +148,17 @@ class ErrorManager:
 
 	@contextmanager
 	def context(self, run_name: Optional[str] = None):
+		"""Контекстный менеджер для автоматической отправки отчета.
+		
+		При выходе из контекста автоматически отправляет отчет, если были ошибки
+		или включена отправка отчетов без ошибок.
+		
+		Args:
+			run_name: Имя запуска для отчета
+			
+		Yields:
+			ErrorTrackingLogger: Логгер для записи сообщений
+		"""
 		try:
 			yield self.logger
 		except Exception as exc:

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: runreporter
-Version: 0.2.2
+Version: 0.3
 Summary: Library for logging runtime errors and sending execution reports via Telegram and Email
 Author: nosikmov
 Requires-Python: >=3.9
@@ -21,7 +21,7 @@ Requires-Dist: requests>=2.31.0
 ## Установка
 
 ```bash
-pip install .
+pip install runreporter
 ```
 
 ## Примеры использования
@@ -32,6 +32,7 @@ from runreporter import ErrorManager, SmtpConfig
 
 manager = ErrorManager(
     log_file_path="logs/app.log",  # папка logs будет создана автоматически
+    logger_name="myapp",  # имя в логах (по умолчанию "app")
     telegram_bot_token="123:ABC",
     telegram_chat_ids=[11111111, 22222222],
     smtp_config=SmtpConfig(
@@ -58,6 +59,7 @@ from runreporter import ErrorManager, SmtpConfig
 
 manager = ErrorManager(
     log_file_path="logs/app.log",
+    logger_name="myapp",  # имя в логах
     telegram_bot_token="123:ABC",
     telegram_chat_ids=[11111111],
     smtp_config=SmtpConfig(
@@ -98,7 +100,7 @@ log.info("Финиш")
 ```python
 # main.py
 from runreporter import ErrorManager
-manager = ErrorManager(log_file_path="logs/app.log")
+manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp")
 
 # service_a.py
 from runreporter import get_logger_for
@@ -115,7 +117,7 @@ log.error("Ошибка")  # [ServiceB] ...
 ```python
 # main.py
 from runreporter import ErrorManager
-manager = ErrorManager(log_file_path="logs/app.log")
+manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp")
 
 from runreporter import get_logger_for
 from mymodule import Worker

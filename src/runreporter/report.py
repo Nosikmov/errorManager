@@ -10,6 +10,15 @@ DEFAULT_MAX_TAIL_LINES = 300
 
 @dataclass
 class RunSummary:
+	"""Сводка о выполнении задачи для отчета.
+	
+	Attributes:
+		run_name: Имя задачи
+		had_errors: Были ли ошибки во время выполнения
+		primary_channel: Приоритетный канал отправки
+		sent_to_telegram: Отправлен ли отчет в Telegram
+		sent_to_email: Отправлен ли отчет на email
+	"""
 	run_name: Optional[str]
 	had_errors: bool
 	primary_channel: str
@@ -17,6 +26,11 @@ class RunSummary:
 	sent_to_email: bool
 
 	def to_text(self) -> str:
+		"""Преобразовать сводку в текстовый формат для отчета.
+		
+		Returns:
+			str: Текстовое представление сводки
+		"""
 		name_part = f"Имя задачи: {self.run_name}\n" if self.run_name else ""
 		status = "С ошибками" if self.had_errors else "Без ошибок"
 		primary = f"Приоритетный канал: {self.primary_channel}\n"

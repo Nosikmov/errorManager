@@ -7,24 +7,33 @@
 - Сбор последних 300 строк лога в отчет
 - Отправка отчетов в Telegram (по chat_id)
 - Отправка отчетов на Email (SMTP)
+- Поддержка множественных пользователей с индивидуальными настройками
 - Флаги: отправлять ли отчеты при отсутствии ошибок; приоритетный канал (Telegram/Email)
 
 ## Установка
 
 ```bash
-pip install .
+pip install runreporter
 ```
 
 ## Примеры использования
 
 ### Вариант 1: через контекстный менеджер (with)
 ```python
-from runreporter import ErrorManager, SmtpConfig
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
+
+# Создаем пользователей с индивидуальными настройками
+users = [
+    NotificationUser(name="admin", telegram_chat_id=11111111, email="admin@example.com"),
+    NotificationUser(name="dev1", telegram_chat_id=22222222),  # только Telegram
+    NotificationUser(name="dev2", email="dev2@example.com"),    # только Email
+]
 
 manager = ErrorManager(
     log_file_path="logs/app.log",  # папка logs будет создана автоматически
+    logger_name="myapp",  # имя в логах (по умолчанию "app")
     telegram_bot_token="123:ABC",
-    telegram_chat_ids=[11111111, 22222222],
+    users=users,
     smtp_config=SmtpConfig(
         host="smtp.example.com",
         port=465,
@@ -33,7 +42,6 @@ manager = ErrorManager(
         use_ssl=True,
         from_addr="user@example.com",
     ),
-    email_recipients=["dev1@example.com", "dev2@example.com"],
     send_reports_without_errors=False,
     primary_channel="telegram",
 )
@@ -45,12 +53,18 @@ with manager.context(run_name="Ежедневный импорт") as log:
 
 ### Вариант 2: без with (явный старт и финиш)
 ```python
-from runreporter import ErrorManager, SmtpConfig
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
+
+users = [
+    NotificationUser(name="admin", telegram_chat_id=11111111, email="admin@example.com"),
+    NotificationUser(name="dev", email="dev@example.com"),
+]
 
 manager = ErrorManager(
     log_file_path="logs/app.log",
+    logger_name="myapp",  # имя в логах
     telegram_bot_token="123:ABC",
-    telegram_chat_ids=[11111111],
+    users=users,
     smtp_config=SmtpConfig(
         host="smtp.example.com",
         port=465,
@@ -58,7 +72,6 @@ manager = ErrorManager(
         password="pass",
         use_ssl=True,
     ),
-    email_recipients=["dev@example.com"],
     send_reports_without_errors=False,
     primary_channel="email",
 )
@@ -88,8 +101,9 @@ log.info("Финиш")
 ### Вариант 4: общий логгер из разных модулей (без передачи экземпляра)
 ```python
 # main.py
-from runreporter import ErrorManager
-manager = ErrorManager(log_file_path="logs/app.log")
+from runreporter import ErrorManager, NotificationUser
+users = [NotificationUser(name="admin", telegram_chat_id=11111111)]
+manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp", users=users)
 
 # service_a.py
 from runreporter import get_logger_for
@@ -105,8 +119,9 @@ log.error("Ошибка")  # [ServiceB] ...
 ### Вариант 5: общий логгер через внедрение зависимостей (DI)
 ```python
 # main.py
-from runreporter import ErrorManager
-manager = ErrorManager(log_file_path="logs/app.log")
+from runreporter import ErrorManager, NotificationUser
+users = [NotificationUser(name="admin", telegram_chat_id=11111111)]
+manager = ErrorManager(log_file_path="logs/app.log", logger_name="myapp", users=users)
 
 from runreporter import get_logger_for
 from mymodule import Worker
@@ -125,9 +140,18 @@ class Worker:
         self.log.info("Старт")
 ```
 
-## Конфигурация
-- `send_reports_without_errors`: если False, отчеты будут отправляться только при наличии ошибок
-- `primary_channel`: "telegram" или "email" — приоритет канала; второй используется как резервный
+## Конфигурация пользователей
+
+Каждый пользователь может иметь:
+- **Только Telegram**: `NotificationUser(name="user", telegram_chat_id=123456)`
+- **Только Email**: `NotificationUser(name="user", email="user@example.com")`
+- **Оба канала**: `NotificationUser(name="user", telegram_chat_id=123456, email="user@example.com")`
+
+## Приоритет отправки
+
+- `primary_channel`: "telegram" или "email" — приоритетный канал
+- Если приоритетный канал недоступен, используется резервный
+- Каждый пользователь получает уведомления по своим настроенным каналам
 
 ## Лицензия
 MIT

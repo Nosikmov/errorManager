@@ -8,48 +8,94 @@ from typing import Iterable, List, Optional
 
 import requests
 
-from .email_config import SmtpConfig
+from .email_config import SmtpConfig, NotificationUser
 
 
 class TelegramTransport:
-	def __init__(self, bot_token: Optional[str], chat_ids: Optional[Iterable[int]]) -> None:
+	"""Транспорт для отправки отчетов через Telegram Bot API."""
+	
+	def __init__(self, bot_token: Optional[str], users: Optional[Iterable[NotificationUser]]) -> None:
+		"""Инициализация Telegram транспорта.
+		
+		Args:
+			bot_token: Токен бота Telegram
+			users: Список пользователей с настройками Telegram
+		"""
 		self.bot_token = bot_token
-		self.chat_ids = list(chat_ids) if chat_ids else []
+		self.users = list(users) if users else []
 
 	@property
 	def enabled(self) -> bool:
-		return bool(self.bot_token and self.chat_ids)
+		"""Проверить, настроен ли транспорт для отправки.
+		
+		Returns:
+			bool: True если есть токен и пользователи с Telegram, False иначе
+		"""
+		return bool(self.bot_token and any(user.telegram_chat_id for user in self.users))
 
 	def send_text(self, text: str) -> List[requests.Response]:
+		"""Отправить текстовое сообщение всем пользователям с Telegram.
+		
+		Args:
+			text: Текст сообщения
+			
+		Returns:
+			List[requests.Response]: Список ответов от Telegram API
+		"""
 		if not self.enabled:
 			return []
 		url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
 		responses = []
-		for chat_id in self.chat_ids:
-			payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-			responses.append(requests.post(url, json=payload, timeout=20))
+		for user in self.users:
+			if user.telegram_chat_id:
+				payload = {"chat_id": user.telegram_chat_id, "text": text, "parse_mode": "HTML"}
+				responses.append(requests.post(url, json=payload, timeout=20))
 		return responses
 
 	def send_document(self, caption: str, filename: str, content_bytes: bytes) -> List[requests.Response]:
+		"""Отправить документ всем пользователям с Telegram.
+		
+		Args:
+			caption: Подпись к документу
+			filename: Имя файла
+			content_bytes: Содержимое файла в байтах
+			
+		Returns:
+			List[requests.Response]: Список ответов от Telegram API
+		"""
 		if not self.enabled:
 			return []
 		url = f"https://api.telegram.org/bot{self.bot_token}/sendDocument"
 		responses = []
-		for chat_id in self.chat_ids:
-			files = {"document": (filename, content_bytes)}
-			data = {"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML"}
-			responses.append(requests.post(url, data=data, files=files, timeout=30))
+		for user in self.users:
+			if user.telegram_chat_id:
+				files = {"document": (filename, content_bytes)}
+				data = {"chat_id": str(user.telegram_chat_id), "caption": caption, "parse_mode": "HTML"}
+				responses.append(requests.post(url, data=data, files=files, timeout=30))
 		return responses
 
 
 class EmailTransport:
-	def __init__(self, smtp_config: Optional[SmtpConfig], recipients: Optional[Iterable[str]]) -> None:
+	"""Транспорт для отправки отчетов через SMTP."""
+	
+	def __init__(self, smtp_config: Optional[SmtpConfig], users: Optional[Iterable[NotificationUser]]) -> None:
+		"""Инициализация Email транспорта.
+		
+		Args:
+			smtp_config: Конфигурация SMTP сервера
+			users: Список пользователей с настройками email
+		"""
 		self.smtp_config = smtp_config
-		self.recipients = list(recipients) if recipients else []
+		self.users = list(users) if users else []
 
 	@property
 	def enabled(self) -> bool:
-		return bool(self.smtp_config and self.recipients)
+		"""Проверить, настроен ли транспорт для отправки.
+		
+		Returns:
+			bool: True если есть конфигурация и пользователи с email, False иначе
+		"""
+		return bool(self.smtp_config and any(user.email for user in self.users))
 
 	def _connect(self) -> smtplib.SMTP:
 		assert self.smtp_config is not None
@@ -64,6 +110,13 @@ class EmailTransport:
 		return server
 
 	def send(self, subject: str, body: str, attachments: Optional[List[tuple[str, bytes, str]]] = None) -> None:
+		"""Отправить email всем пользователям с email адресами.
+		
+		Args:
+			subject: Тема письма
+			body: Текст письма
+			attachments: Список вложений (filename, content_bytes, mime_type)
+		"""
 		if not self.enabled:
 			return
 		assert self.smtp_config is not None
@@ -71,7 +124,10 @@ class EmailTransport:
 		msg = EmailMessage()
 		from_addr = self.smtp_config.from_addr or self.smtp_config.username
 		msg["From"] = from_addr
-		msg["To"] = ", ".join(self.recipients)
+		
+		# Собираем всех пользователей с email
+		email_recipients = [user.email for user in self.users if user.email]
+		msg["To"] = ", ".join(email_recipients)
 		msg["Subject"] = subject
 		msg.set_content(body)
 

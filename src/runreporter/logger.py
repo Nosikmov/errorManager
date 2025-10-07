@@ -9,10 +9,18 @@ _GLOBAL_LOGGER: Optional["ErrorTrackingLogger"] = None
 
 
 class ErrorTrackingLogger:
-	"""Wrapper around Python logger to track if any error/exception was logged.
-	Поддерживает стек контекстов для пометки сообщений."""
+	"""Обертка над Python logger с отслеживанием ошибок и контекстными метками.
+	
+	Автоматически отслеживает наличие ошибок в логах и поддерживает стек контекстов
+	для пометки сообщений префиксами вида [Context1 > Context2].
+	"""
 
 	def __init__(self, logger: Logger) -> None:
+		"""Инициализация логгера с отслеживанием ошибок.
+		
+		Args:
+			logger: Базовый Python logger для записи сообщений
+		"""
 		self._logger = logger
 		self._had_error = False
 		self._context_stack: List[str] = []
@@ -22,6 +30,11 @@ class ErrorTrackingLogger:
 
 	@property
 	def had_error(self) -> bool:
+		"""Проверить, были ли зафиксированы ошибки в логах.
+		
+		Returns:
+			bool: True если были ошибки, False иначе
+		"""
 		return self._had_error
 
 	def _with_ctx(self, msg: str) -> str:
@@ -53,6 +66,17 @@ class ErrorTrackingLogger:
 
 	@contextmanager
 	def context(self, name: str):
+		"""Контекстный менеджер для пометки сообщений.
+		
+		Все сообщения внутри блока будут помечены указанным контекстом.
+		Контексты могут быть вложенными.
+		
+		Args:
+			name: Имя контекста для пометки сообщений
+			
+		Yields:
+			ErrorTrackingLogger: Текущий логгер с активным контекстом
+		"""
 		self._context_stack.append(str(name))
 		try:
 			yield self
@@ -60,18 +84,40 @@ class ErrorTrackingLogger:
 			self._context_stack.pop()
 
 	def with_component(self, name: str) -> "ComponentLogger":
+		"""Создать логгер с префиксом компонента.
+		
+		Args:
+			name: Имя компонента для префикса сообщений
+			
+		Returns:
+			ComponentLogger: Логгер с префиксом компонента
+		"""
 		return ComponentLogger(self, name)
 
 
 class ComponentLogger:
-	"""Lightweight facade that prefixes all messages with a component name."""
+	"""Легковесная обертка для логгера с префиксом компонента.
+	
+	Все сообщения автоматически помечаются префиксом [ComponentName].
+	"""
 
 	def __init__(self, base: ErrorTrackingLogger, component_name: str) -> None:
+		"""Инициализация логгера компонента.
+		
+		Args:
+			base: Базовый логгер с отслеживанием ошибок
+			component_name: Имя компонента для префикса
+		"""
 		self._base = base
 		self._component = str(component_name)
 
 	@property
 	def had_error(self) -> bool:
+		"""Проверить, были ли зафиксированы ошибки в базовом логгере.
+		
+		Returns:
+			bool: True если были ошибки, False иначе
+		"""
 		return self._base.had_error
 
 	def _p(self, msg: str) -> str:
@@ -97,22 +143,53 @@ class ComponentLogger:
 
 	@contextmanager
 	def context(self, name: str):
+		"""Контекстный менеджер для пометки сообщений компонента.
+		
+		Сообщения будут помечены как [Component > Context].
+		
+		Args:
+			name: Имя контекста
+			
+		Yields:
+			ComponentLogger: Текущий логгер с активным контекстом
+		"""
 		with self._base.context(f"{self._component} > {name}") as _:
 			yield self
 
 
 def set_global_logger(logger: ErrorTrackingLogger) -> None:
+	"""Установить глобальный логгер для использования в модулях.
+	
+	Args:
+		logger: Логгер для установки как глобальный
+	"""
 	global _GLOBAL_LOGGER
 	_GLOBAL_LOGGER = logger
 
 
 def get_global_logger() -> ErrorTrackingLogger:
+	"""Получить глобальный логгер.
+	
+	Returns:
+		ErrorTrackingLogger: Глобальный логгер
+		
+	Raises:
+		RuntimeError: Если глобальный логгер не установлен
+	"""
 	if _GLOBAL_LOGGER is None:
 		raise RuntimeError("Global logger is not set. Initialize ErrorManager first or call set_global_logger().")
 	return _GLOBAL_LOGGER
 
 
 def get_logger_for(component_name: str) -> ComponentLogger:
+	"""Получить логгер для компонента с префиксом.
+	
+	Args:
+		component_name: Имя компонента для префикса
+		
+	Returns:
+		ComponentLogger: Логгер с префиксом компонента
+	"""
 	return get_global_logger().with_component(component_name)
 
 
