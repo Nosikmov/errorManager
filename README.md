@@ -16,9 +16,47 @@
 pip install runreporter
 ```
 
+## Быстрый старт (рекомендуется)
+
+```python
+# config.py
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
+
+users = [
+    NotificationUser(name="admin", telegram_chat_id=11111111, email="admin@example.com"),
+]
+
+manager = ErrorManager(
+    log_file_path="logs/app.log",
+    logger_name="myapp",
+    telegram_bot_token="123:ABC",
+    users=users,
+    smtp_config=SmtpConfig(
+        host="smtp.example.com",
+        port=465,
+        username="user@example.com",
+        password="pass",
+        use_ssl=True,
+    ),
+)
+app_logger = manager.get_logger(run_name="MainApp")
+
+# любой модуль приложения
+from config import app_logger
+log = app_logger.with_permanent_context_path("MyProject", "Billing", "Invoices")
+
+log.info("Start")               # [MyProject > Billing > Invoices] Start
+child = log.child("Worker")
+child.error("Parse failed")     # [MyProject > Billing > Invoices > Worker] Parse failed
+```
+
+> Примечание: локальные вложенные контексты можно добавлять точечно: `with log.context("Step"):`
+
+
 ## Примеры использования
 
-### Вариант 1: через контекстный менеджер (with)
+### Вариант 1 (опционально): через контекстный менеджер (with)
+
 ```python
 from runreporter import ErrorManager, SmtpConfig, NotificationUser
 
@@ -51,7 +89,7 @@ with manager.context(run_name="Ежедневный импорт") as log:
     log.error("Ошибка обработки записи id=42")
 ```
 
-### Вариант 2: без with (явный старт и финиш)
+### Вариант 2 (опционально): без with (явный старт и финиш)
 ```python
 from runreporter import ErrorManager, SmtpConfig, NotificationUser
 
@@ -87,7 +125,10 @@ finally:
     manager.send_report()
 ```
 
-### Вариант 3: локальный контекст сообщений
+### Вариант 3 (опционально): локальный контекст сообщений
+
+> В большинстве случаев удобнее использовать постоянный контекст (см. Быстрый старт). Локальный контекст полезен для кратковременных шагов внутри модуля.
+
 ```python
 log = manager.get_logger(run_name="ETL")
 
@@ -199,6 +240,41 @@ with app_logger.context("Запуск приложения"):
     worker.run()
     app_logger.info("Завершение работы")
 ```
+
+# Дополнительно: иерархические контексты без with
+
+```python
+# config.py
+from runreporter import ErrorManager, SmtpConfig, NotificationUser
+
+manager = ErrorManager(
+    log_file_path="logs/app.log",
+    logger_name="myapp",
+    users=[NotificationUser(name="admin", telegram_chat_id=11111111)],
+)
+app_logger = manager.get_logger(run_name="MainApp")
+
+# service_orders/__init__.py (контекст модуля)
+from config import app_logger
+log = app_logger.with_permanent_context_path("ProjectX", "Orders")
+
+# service_orders/processor.py
+from service_orders import log
+
+# дочерний контекст "подмодуль"
+proc_log = log.child("Processor")
+
+proc_log.info("Загрузка заказов")          # [ProjectX > Orders > Processor] ...
+with proc_log.context("Валидация"):
+    proc_log.error("Неверный статус заказа") # [ProjectX > Orders > Processor > Валидация] ...
+
+# service_reports/generator.py — автоматический контекст из имени модуля
+from config import app_logger
+module_log = app_logger.from_module(__name__, project="ProjectX")
+module_log.info("Старт генерации") # [ProjectX > service_reports > generator] ...
+```
+
+> Замечание: `get_logger_for(...)` считается устаревшим — используйте `with_permanent_context`, `with_permanent_context_path`, `child` или `from_module(__name__)`.
 
 ## Конфигурация пользователей
 

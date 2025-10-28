@@ -86,15 +86,31 @@ class ErrorTrackingLogger:
 	def with_permanent_context(self, context_name: str) -> "PermanentContextLogger":
 		"""Создать логгер с постоянным контекстом.
 		
-		Все сообщения будут автоматически помечены указанным контекстом.
-		
 		Args:
 			context_name: Имя контекста для постоянной пометки сообщений
-			
-		Returns:
-			PermanentContextLogger: Логгер с постоянным контекстом
 		"""
 		return PermanentContextLogger(self, context_name)
+
+	def with_permanent_context_path(self, *segments: str) -> "PermanentContextLogger":
+		"""Создать логгер с постоянным иерархическим контекстом.
+		
+		Args:
+			*segments: Последовательность сегментов (Проект, Модуль, Подмодуль, ...)
+		"""
+		path = " > ".join(str(s) for s in segments if s)
+		return PermanentContextLogger(self, path)
+
+	def from_module(self, module_name: str, project: Optional[str] = None) -> "PermanentContextLogger":
+		"""Создать логгер с контекстом на основе имени Python-модуля.
+		
+		Args:
+			module_name: Имя модуля (обычно __name__)
+			project: Необязательное имя проекта, будет префиксом пути
+		"""
+		parts = [p for p in str(module_name).split(".") if p]
+		if project:
+			parts.insert(0, project)
+		return self.with_permanent_context_path(*parts)
 
 
 class PermanentContextLogger:
@@ -124,6 +140,19 @@ class PermanentContextLogger:
 
 	def _p(self, msg: str) -> str:
 		return f"[{self._context}] {msg}"
+
+	def child(self, segment: str) -> "PermanentContextLogger":
+		"""Создать дочерний логгер с добавлением сегмента к контексту.
+		Например: [Project > Module] + "Sub" => [Project > Module > Sub]
+		"""
+		segment = str(segment)
+		new_ctx = f"{self._context} > {segment}" if self._context else segment
+		return PermanentContextLogger(self._base, new_ctx)
+
+	def with_additional_context_path(self, *segments: str) -> "PermanentContextLogger":
+		"""Создать дочерний логгер, добавив несколько сегментов к пути контекста."""
+		tail = " > ".join(str(s) for s in segments if s)
+		return self.child(tail) if tail else self
 
 	def debug(self, msg: str, *args, **kwargs) -> None:
 		self._base.debug(self._p(msg), *args, **kwargs)
@@ -159,68 +188,6 @@ class PermanentContextLogger:
 			yield self
 
 
-class ComponentLogger:
-	"""Легковесная обертка для логгера с префиксом компонента.
-	
-	Все сообщения автоматически помечаются префиксом [ComponentName].
-	"""
-
-	def __init__(self, base: ErrorTrackingLogger, component_name: str) -> None:
-		"""Инициализация логгера компонента.
-		
-		Args:
-			base: Базовый логгер с отслеживанием ошибок
-			component_name: Имя компонента для префикса
-		"""
-		self._base = base
-		self._component = str(component_name)
-
-	@property
-	def had_error(self) -> bool:
-		"""Проверить, были ли зафиксированы ошибки в базовом логгере.
-		
-		Returns:
-			bool: True если были ошибки, False иначе
-		"""
-		return self._base.had_error
-
-	def _p(self, msg: str) -> str:
-		return f"[{self._component}] {msg}"
-
-	def debug(self, msg: str, *args, **kwargs) -> None:
-		self._base.debug(self._p(msg), *args, **kwargs)
-
-	def info(self, msg: str, *args, **kwargs) -> None:
-		self._base.info(self._p(msg), *args, **kwargs)
-
-	def warning(self, msg: str, *args, **kwargs) -> None:
-		self._base.warning(self._p(msg), *args, **kwargs)
-
-	def error(self, msg: str, *args, **kwargs) -> None:
-		self._base.error(self._p(msg), *args, **kwargs)
-
-	def exception(self, msg: str, *args, **kwargs) -> None:
-		self._base.exception(self._p(msg), *args, **kwargs)
-
-	def critical(self, msg: str, *args, **kwargs) -> None:
-		self._base.critical(self._p(msg), *args, **kwargs)
-
-	@contextmanager
-	def context(self, name: str):
-		"""Контекстный менеджер для пометки сообщений компонента.
-		
-		Сообщения будут помечены как [Component > Context].
-		
-		Args:
-			name: Имя контекста
-			
-		Yields:
-			ComponentLogger: Текущий логгер с активным контекстом
-		"""
-		with self._base.context(f"{self._component} > {name}") as _:
-			yield self
-
-
 def set_global_logger(logger: ErrorTrackingLogger) -> None:
 	"""Установить глобальный логгер для использования в модулях.
 	
@@ -245,16 +212,9 @@ def get_global_logger() -> ErrorTrackingLogger:
 	return _GLOBAL_LOGGER
 
 
-def get_logger_for(component_name: str) -> ComponentLogger:
-	"""Получить логгер для компонента с префиксом.
-	
-	Args:
-		component_name: Имя компонента для префикса
-		
-	Returns:
-		ComponentLogger: Логгер с префиксом компонента
-	"""
-	return get_global_logger().with_component(component_name)
+def get_logger_for(component_name: str):
+	"""DEPRECATED: Используйте with_permanent_context или from_module вместо этого."""
+	return get_global_logger().with_permanent_context(component_name)
 
 
 def create_file_logger(name: str, log_file_path: str, level: int = logging.INFO) -> ErrorTrackingLogger:
