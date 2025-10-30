@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runreporter"
-version = "0.3.5"
+version = "0.3.6"
 description = "Library for logging runtime errors and sending execution reports via Telegram and Email"
 authors = [{ name = "nosikmov" }]
 readme = "README.md"
@@ -12,5 +12,15 @@ requires-python = ">=3.9"
 dependencies = [
   "requests>=2.31.0"
 ]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["runreporter*"]
+
+
+
 
 

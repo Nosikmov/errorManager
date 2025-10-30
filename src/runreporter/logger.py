@@ -83,30 +83,24 @@ class ErrorTrackingLogger:
 		finally:
 			self._context_stack.pop()
 
-	def with_permanent_context(self, context_name: str) -> "PermanentContextLogger":
+	def with_permanent_context(self, context_name: str, level: Optional[int] = None) -> "PermanentContextLogger":
 		"""Создать логгер с постоянным контекстом.
 		
 		Args:
 			context_name: Имя контекста для постоянной пометки сообщений
+			level: Минимальный уровень для этого логгера (например, logging.INFO)
 		"""
-		return PermanentContextLogger(self, context_name)
+		logger = PermanentContextLogger(self, context_name)
+		if level is not None:
+			logger.set_level(level)
+		return logger
 
 	def with_permanent_context_path(self, *segments: str) -> "PermanentContextLogger":
-		"""Создать логгер с постоянным иерархическим контекстом.
-		
-		Args:
-			*segments: Последовательность сегментов (Проект, Модуль, Подмодуль, ...)
-		"""
-		path = " > ".join(str(s) for s in segments if s)
-		return PermanentContextLogger(self, path)
+		raise NotImplementedError("with_permanent_context_path is removed. Use with_permanent_context(name) per-module.")
 
 	def from_module(self, module_name: str, project: Optional[str] = None) -> "PermanentContextLogger":
-		"""Создать логгер с контекстом на основе имени Python-модуля.
-		
-		Args:
-			module_name: Имя модуля (обычно __name__)
-			project: Необязательное имя проекта, будет префиксом пути
-		"""
+		raise NotImplementedError("from_module is removed. Use with_permanent_context(name) and set module name explicitly.")
+
 		parts = [p for p in str(module_name).split(".") if p]
 		if project:
 			parts.insert(0, project)
@@ -128,6 +122,19 @@ class PermanentContextLogger:
 		"""
 		self._base = base
 		self._context = str(context_name)
+		self._min_level: Optional[int] = None
+
+	def set_level(self, level: int) -> "PermanentContextLogger":
+		"""Задать минимальный уровень логирования для данного логгера модуля.
+		Например: logging.INFO или logging.DEBUG. Возвращает self для чейнинга.
+		"""
+		self._min_level = int(level)
+		return self
+
+	def _enabled(self, level: int) -> bool:
+		if self._min_level is None:
+			return True
+		return int(level) >= int(self._min_level)
 
 	@property
 	def had_error(self) -> bool:
@@ -142,35 +149,35 @@ class PermanentContextLogger:
 		return f"[{self._context}] {msg}"
 
 	def child(self, segment: str) -> "PermanentContextLogger":
-		"""Создать дочерний логгер с добавлением сегмента к контексту.
-		Например: [Project > Module] + "Sub" => [Project > Module > Sub]
-		"""
-		segment = str(segment)
-		new_ctx = f"{self._context} > {segment}" if self._context else segment
-		return PermanentContextLogger(self._base, new_ctx)
+		raise NotImplementedError("child is removed. Use a separate module-level context via with_permanent_context.")
 
 	def with_additional_context_path(self, *segments: str) -> "PermanentContextLogger":
-		"""Создать дочерний логгер, добавив несколько сегментов к пути контекста."""
-		tail = " > ".join(str(s) for s in segments if s)
-		return self.child(tail) if tail else self
+		raise NotImplementedError("with_additional_context_path is removed. Use with(log.context(\"Step\")) inside a module.")
 
 	def debug(self, msg: str, *args, **kwargs) -> None:
-		self._base.debug(self._p(msg), *args, **kwargs)
+		if self._enabled(logging.DEBUG):
+			self._base.debug(self._p(msg), *args, **kwargs)
 
 	def info(self, msg: str, *args, **kwargs) -> None:
-		self._base.info(self._p(msg), *args, **kwargs)
+		if self._enabled(logging.INFO):
+			self._base.info(self._p(msg), *args, **kwargs)
 
 	def warning(self, msg: str, *args, **kwargs) -> None:
-		self._base.warning(self._p(msg), *args, **kwargs)
+		if self._enabled(logging.WARNING):
+			self._base.warning(self._p(msg), *args, **kwargs)
 
 	def error(self, msg: str, *args, **kwargs) -> None:
-		self._base.error(self._p(msg), *args, **kwargs)
+		if self._enabled(logging.ERROR):
+			self._base.error(self._p(msg), *args, **kwargs)
 
 	def exception(self, msg: str, *args, **kwargs) -> None:
-		self._base.exception(self._p(msg), *args, **kwargs)
+		# exception соотносится с ERROR
+		if self._enabled(logging.ERROR):
+			self._base.exception(self._p(msg), *args, **kwargs)
 
 	def critical(self, msg: str, *args, **kwargs) -> None:
-		self._base.critical(self._p(msg), *args, **kwargs)
+		if self._enabled(logging.CRITICAL):
+			self._base.critical(self._p(msg), *args, **kwargs)
 
 	@contextmanager
 	def context(self, name: str):
@@ -213,8 +220,7 @@ def get_global_logger() -> ErrorTrackingLogger:
 
 
 def get_logger_for(component_name: str):
-	"""DEPRECATED: Используйте with_permanent_context или from_module вместо этого."""
-	return get_global_logger().with_permanent_context(component_name)
+	raise NotImplementedError("get_logger_for is removed. Import logger from config and call with_permanent_context(name).")
 
 
 def create_file_logger(name: str, log_file_path: str, level: int = logging.INFO) -> ErrorTrackingLogger:

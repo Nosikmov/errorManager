@@ -1,3 +1,5 @@
 /dist
 
 /.venv
+
+/local.publish.ps1
