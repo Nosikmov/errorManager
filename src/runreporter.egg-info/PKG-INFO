@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: runreporter
-Version: 0.3.6
+Version: 0.3.7
 Summary: Library for logging runtime errors and sending execution reports via Telegram and Email
 Author: nosikmov
 Requires-Python: >=3.9
@@ -52,15 +52,14 @@ app_logger = manager.get_logger(run_name="MainApp")
 
 # любой модуль приложения
 from config import app_logger
-log = app_logger.with_permanent_context_path("MyProject", "Billing", "Invoices")
+log = app_logger.with_permanent_context("Billing.Invoices")  # фиксированный контекст модуля
 
-log.info("Start")               # [MyProject > Billing > Invoices] Start
-child = log.child("Worker")
-child.error("Parse failed")     # [MyProject > Billing > Invoices > Worker] Parse failed
+log.info("Start")                 # [Billing.Invoices] Start
+with log.context("Worker"):
+    log.error("Parse failed")     # [Billing.Invoices > Worker] Parse failed
 ```
 
-> Примечание: локальные вложенные контексты можно добавлять точечно: `with log.context("Step"):`
-
+> Примечание: контекст модуля задается один раз через `with_permanent_context("ModuleName")`. Для локальных шагов используйте `with log.context("Step"):`.
 
 ## Примеры использования
 
@@ -250,10 +249,10 @@ with app_logger.context("Запуск приложения"):
     app_logger.info("Завершение работы")
 ```
 
-# Дополнительно: иерархические контексты без with
+# Дополнительно: использование по модулям
 
 ```python
-# config.py
+# config.py - центральный файл конфигурации
 from runreporter import ErrorManager, SmtpConfig, NotificationUser
 
 manager = ErrorManager(
@@ -265,25 +264,22 @@ app_logger = manager.get_logger(run_name="MainApp")
 
 # service_orders/__init__.py (контекст модуля)
 from config import app_logger
-log = app_logger.with_permanent_context_path("ProjectX", "Orders")
+log = app_logger.with_permanent_context("Orders")
 
 # service_orders/processor.py
 from service_orders import log
 
-# дочерний контекст "подмодуль"
-proc_log = log.child("Processor")
+log.info("Загрузка заказов")              # [Orders] ...
+with log.context("Валидация"):
+    log.error("Неверный статус заказа")   # [Orders > Валидация] ...
 
-proc_log.info("Загрузка заказов")          # [ProjectX > Orders > Processor] ...
-with proc_log.context("Валидация"):
-    proc_log.error("Неверный статус заказа") # [ProjectX > Orders > Processor > Валидация] ...
-
-# service_reports/generator.py — автоматический контекст из имени модуля
+# service_reports/generator.py — другой модуль
 from config import app_logger
-module_log = app_logger.from_module(__name__, project="ProjectX")
-module_log.info("Старт генерации") # [ProjectX > service_reports > generator] ...
+rep_log = app_logger.with_permanent_context("Reports.Generator")
+rep_log.info("Старт генерации")           # [Reports.Generator] ...
 ```
 
-> Замечание: `get_logger_for(...)` считается устаревшим — используйте `with_permanent_context`, `with_permanent_context_path`, `child` или `from_module(__name__)`.
+> Замечание: иерархические хелперы `with_permanent_context_path`, `child`, `from_module` и `get_logger_for` удалены. Используйте только `with_permanent_context("Module")` и при необходимости `with log.context("Step"):`.
 
 ## Конфигурация пользователей
 
@@ -300,3 +296,28 @@ module_log.info("Старт генерации") # [ProjectX > service_reports >
 
 ## Лицензия
 MIT
+
+## Уровни логирования на модуль
+
+```python
+from config import app_logger
+import logging
+
+# Модуль A — пишем только INFO и выше
+logA = app_logger.with_permanent_context("ModuleA", level=logging.INFO)
+logA.debug("skip")     # пропустится
+logA.info("ok")        # [ModuleA] ok
+
+# Модуль B — хотим подробный DEBUG
+logB = app_logger.with_permanent_context("ModuleB", level=logging.DEBUG)
+logB.debug("details")  # [ModuleB] details
+logB.error("boom")     # [ModuleB] boom
+
+# Локальный дополнительный контекст в модуле B
+with logB.context("Step1"):
+    logB.info("work")  # [ModuleB > Step1] work
+```
+
+> Важно: глобальный `ErrorManager(log_level=...)` задаёт минимальный уровень для всего приложения. 
+> Чтобы модульные DEBUG не отбрасывались, установите `log_level=logging.DEBUG` при создании `ErrorManager`, 
+> а затем ограничивайте модульные уровни через `with_permanent_context(..., level=...)`.

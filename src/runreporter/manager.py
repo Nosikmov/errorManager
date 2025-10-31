@@ -63,6 +63,8 @@ class ErrorManager:
 			ErrorTrackingLogger: Логгер с отслеживанием ошибок
 		"""
 		self._active_run_name = run_name
+		# Каждый новый запуск должен начинаться с чистого флага ошибок
+		self.logger.reset_error_flag()
 		return self.logger
 
 	@contextmanager
@@ -109,8 +111,10 @@ class ErrorManager:
 			sent_to_telegram=False,
 			sent_to_email=False,
 		)
-		text = build_report_text(summary, log_tail)
-		attachment_bytes = build_log_attachment_bytes(log_tail)
+		# Приложение логов и подробный текст нужны только при наличии ошибок
+		include_log_tail = summary.had_errors
+		text = build_report_text(summary, log_tail, include_log_tail=include_log_tail)
+		attachment_bytes = build_log_attachment_bytes(log_tail) if include_log_tail else b""
 
 		sent_tg = False
 		sent_mail = False
@@ -119,16 +123,18 @@ class ErrorManager:
 			if not self.tg.enabled:
 				return False
 			self.tg.send_text(text)
-			self.tg.send_document(caption="Лог последней сессии", filename="log_tail.txt", content_bytes=attachment_bytes)
+			if include_log_tail:
+				self.tg.send_document(caption="Лог последней сессии", filename="log_tail.txt", content_bytes=attachment_bytes)
 			return True
 
 		def try_send_email() -> bool:
 			if not self.mail.enabled:
 				return False
+			attachments = [("log_tail.txt", attachment_bytes, "text/plain")] if include_log_tail else None
 			self.mail.send(
 				subject=f"Отчет выполнения: {run_name or ''}",
 				body=text,
-				attachments=[("log_tail.txt", attachment_bytes, "text/plain")],
+				attachments=attachments,
 			)
 			return True
 
@@ -160,6 +166,8 @@ class ErrorManager:
 			ErrorTrackingLogger: Логгер для записи сообщений
 		"""
 		try:
+			# Начинаем новый запуск — сбрасываем флаг ошибок
+			self.logger.reset_error_flag()
 			yield self.logger
 		except Exception as exc:
 			self.logger.exception(f"Исключение во время выполнения: {exc}")

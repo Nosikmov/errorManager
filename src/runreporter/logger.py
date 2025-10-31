@@ -37,6 +37,10 @@ class ErrorTrackingLogger:
 		"""
 		return self._had_error
 
+	def reset_error_flag(self) -> None:
+		"""Сбросить флаг наличия ошибок перед новым запуском."""
+		self._had_error = False
+
 	def _with_ctx(self, msg: str) -> str:
 		if not self._context_stack:
 			return msg

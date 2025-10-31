@@ -48,13 +48,16 @@ def read_log_tail(log_file_path: str, max_lines: int = DEFAULT_MAX_TAIL_LINES) -
 		return "".join(lines[-max_lines:])
 
 
-def build_report_text(summary: RunSummary, log_tail: str) -> str:
-	return (
-		f"{summary.to_text()}\n"
-		"Последние строки лога (до 300):\n"
-		"-------------------------------\n"
-		f"{log_tail}"
-	)
+def build_report_text(summary: RunSummary, log_tail: str, include_log_tail: bool = True) -> str:
+	base = summary.to_text()
+	if include_log_tail:
+		return (
+			f"{base}\n"
+			"Последние строки лога (до 300):\n"
+			"-------------------------------\n"
+			f"{log_tail}"
+		)
+	return base
 
 
 def build_log_attachment_bytes(log_tail: str) -> bytes:
