@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: runreporter
-Version: 0.3.7
+Version: 0.3.7.5
 Summary: Library for logging runtime errors and sending execution reports via Telegram and Email
 Author: nosikmov
 Requires-Python: >=3.9

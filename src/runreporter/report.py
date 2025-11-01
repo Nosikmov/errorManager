@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 
-DEFAULT_MAX_TAIL_LINES = 300
+DEFAULT_MAX_TAIL_LINES = 120
 
 
 @dataclass
@@ -15,7 +15,6 @@ class RunSummary:
 	Attributes:
 		run_name: Имя задачи
 		had_errors: Были ли ошибки во время выполнения
-		primary_channel: Приоритетный канал отправки
 		sent_to_telegram: Отправлен ли отчет в Telegram
 		sent_to_email: Отправлен ли отчет на email
 	"""
@@ -26,16 +25,10 @@ class RunSummary:
 	sent_to_email: bool
 
 	def to_text(self) -> str:
-		"""Преобразовать сводку в текстовый формат для отчета.
-		
-		Returns:
-			str: Текстовое представление сводки
-		"""
+		"""Базовый текст сводки без каналов доставки (для унификации формата)."""
 		name_part = f"Имя задачи: {self.run_name}\n" if self.run_name else ""
 		status = "С ошибками" if self.had_errors else "Без ошибок"
-		primary = f"Приоритетный канал: {self.primary_channel}\n"
-		channels = f"Отправлено: Telegram={self.sent_to_telegram}, Email={self.sent_to_email}\n"
-		return f"Отчет выполнения\n{name_part}Статус: {status}\n{primary}{channels}"
+		return f"Отчет выполнения\n{name_part}Статус: {status}\n{primary}"
 
 
 def read_log_tail(log_file_path: str, max_lines: int = DEFAULT_MAX_TAIL_LINES) -> str:
@@ -49,15 +42,46 @@ def read_log_tail(log_file_path: str, max_lines: int = DEFAULT_MAX_TAIL_LINES) -
 
 
 def build_report_text(summary: RunSummary, log_tail: str, include_log_tail: bool = True) -> str:
+	# Сохранено для обратной совместимости: формирует простой текст (как для email)
+	return build_report_text_email(summary, log_tail, include_log_tail)
+
+
+def build_report_text_email(summary: RunSummary, log_tail: str, include_log_tail: bool = True) -> str:
 	base = summary.to_text()
 	if include_log_tail:
 		return (
-			f"{base}\n"
-			"Последние строки лога (до 300):\n"
+			f"{base}"
+			"Последние строки лога (до 120):\n"
 			"-------------------------------\n"
 			f"{log_tail}"
 		)
 	return base
+
+
+def build_report_text_telegram(summary: RunSummary, log_tail: str, include_log_tail: bool = True) -> str:
+	# Красивое HTML-оформление для Telegram (parse_mode=HTML)
+	status_text = "❌ С ошибками" if summary.had_errors else "✅ Без ошибок"
+	primary_map = {"telegram": "Telegram", "email": "Email"}
+	primary = primary_map.get(summary.primary_channel.lower(), summary.primary_channel)
+	run_name = summary.run_name or "—"
+
+	parts = [
+		f"<b>Отчет выполнения</b>",
+		f"<b>Имя задачи:</b> {run_name}",
+		f"<b>Статус:</b> {status_text}",
+	]
+	if include_log_tail:
+		parts.append("<b>Последние строки лога (до 300):</b>")
+		# Оборачиваем хвост лога в <pre> для сохранения форматирования
+		# Простейшее экранирование угловых скобок
+		escaped = (
+			log_tail.replace("&", "&amp;")
+			.replace("<", "&lt;")
+			.replace(">", "&gt;")
+		)
+		parts.append(f"<pre>{escaped}</pre>")
+
+	return "\n".join(parts)
 
 
 def build_log_attachment_bytes(log_tail: str) -> bytes:
