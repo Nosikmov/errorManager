@@ -25,10 +25,10 @@ class RunSummary:
 	sent_to_email: bool
 
 	def to_text(self) -> str:
-		"""Базовый текст сводки без каналов доставки (для унификации формата)."""
+		"""Базовый текст сводки без указания приоритетного канала."""
 		name_part = f"Имя задачи: {self.run_name}\n" if self.run_name else ""
 		status = "С ошибками" if self.had_errors else "Без ошибок"
-		return f"Отчет выполнения\n{name_part}Статус: {status}\n{primary}"
+		return f"Отчет выполнения\n{name_part}Статус: {status}\n"
 
 
 def read_log_tail(log_file_path: str, max_lines: int = DEFAULT_MAX_TAIL_LINES) -> str:
@@ -61,8 +61,6 @@ def build_report_text_email(summary: RunSummary, log_tail: str, include_log_tail
 def build_report_text_telegram(summary: RunSummary, log_tail: str, include_log_tail: bool = True) -> str:
 	# Красивое HTML-оформление для Telegram (parse_mode=HTML)
 	status_text = "❌ С ошибками" if summary.had_errors else "✅ Без ошибок"
-	primary_map = {"telegram": "Telegram", "email": "Email"}
-	primary = primary_map.get(summary.primary_channel.lower(), summary.primary_channel)
 	run_name = summary.run_name or "—"
 
 	parts = [
@@ -71,7 +69,7 @@ def build_report_text_telegram(summary: RunSummary, log_tail: str, include_log_t
 		f"<b>Статус:</b> {status_text}",
 	]
 	if include_log_tail:
-		parts.append("<b>Последние строки лога (до 300):</b>")
+		parts.append("<b>Последние строки лога (до 120):</b>")
 		# Оборачиваем хвост лога в <pre> для сохранения форматирования
 		# Простейшее экранирование угловых скобок
 		escaped = (
