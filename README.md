@@ -312,3 +312,111 @@ with logB.context("Step1"):
 > Важно: глобальный `ErrorManager(log_level=...)` задаёт минимальный уровень для всего приложения. 
 > Чтобы модульные DEBUG не отбрасывались, установите `log_level=logging.DEBUG` при создании `ErrorManager`, 
 > а затем ограничивайте модульные уровни через `with_permanent_context(..., level=...)`.
+
+## Работа с асинхронными задачами (asyncio.gather)
+
+При использовании `asyncio.gather` для параллельного выполнения нескольких задач, каждая задача должна использовать свой контекст через `with log.context("TaskName")`. Это обеспечивает:
+- Изоляцию контекстов между задачами
+- Автоматическое логирование исключений в каждой задаче
+- Корректную статистику ошибок
+
+**Правильный паттерн:**
+
+```python
+import asyncio
+from config import manager, app_logger
+
+async def process_file_source(get_file_func, source_name, subfolder, filename):
+    """
+    Универсальная функция для обработки источника файла
+    
+    Args:
+        get_file_func: функция для получения файла
+        source_name: название источника (для логирования)
+        subfolder: подпапка для сохранения
+        filename: имя файла
+        
+    Returns:
+        bool: True если файл успешно обработан, False иначе
+    """
+    # Используем контекст для изоляции задачи
+    # Исключения автоматически логируются, try/except не нужен
+    with app_logger.context(source_name):
+        app_logger.info(f"Начало обработки {source_name}")
+        
+        # Получаем файл
+        file_data = await get_file_func()
+        
+        # Обработка файла...
+        app_logger.info(f"Файл {source_name} успешно обработан")
+        return True
+
+async def main():
+    file_sources = [
+        {'func': get_file_1, 'name': 'Priceva API', 'subfolder': 'priceva', 'filename': 'data.json'},
+        {'func': get_file_2, 'name': 'External API', 'subfolder': 'external', 'filename': 'data.json'},
+    ]
+    
+    # Основной контекст оборачивает весь gather
+    # Отчет будет отправлен автоматически после завершения всех задач
+    with manager.context(run_name="Импорт данных"):
+        tasks = []
+        task_names = []
+        
+        for source in file_sources:
+            tasks.append(
+                process_file_source(
+                    source['func'],
+                    source['name'],
+                    source['subfolder'],
+                    source['filename']
+                )
+            )
+            task_names.append(source['name'])
+        
+        # Выполняем все задачи параллельно
+        # return_exceptions=True гарантирует, что исключения не прервут выполнение
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Обрабатываем результаты (опционально)
+        for name, result in zip(task_names, results):
+            if isinstance(result, Exception):
+                app_logger.error(f"Задача {name} завершилась с ошибкой: {result}")
+            elif result:
+                app_logger.info(f"Задача {name} выполнена успешно")
+
+# Запуск
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**Ключевые моменты:**
+
+1. **Основной контекст** (`with manager.context()`) оборачивает весь `gather` — это обеспечивает единое время выполнения и отправку отчета после завершения всех задач.
+
+2. **Контекст задачи** (`with app_logger.context(source_name)`) внутри каждой асинхронной функции изолирует логи этой задачи и автоматически логирует исключения.
+
+3. **Не нужен try/except** в функциях — контекстный менеджер автоматически перехватывает и логирует исключения.
+
+4. **Статистика собирается корректно** — все ошибки из всех задач учитываются в общем отчете.
+
+**Пример с обработкой ошибок:**
+
+```python
+async def process_file_source(get_file_func, source_name, subfolder, filename):
+    with app_logger.context(source_name):
+        app_logger.info(f"Начало обработки {source_name}")
+        
+        try:
+            file_data = await get_file_func()
+            # Обработка...
+            app_logger.info(f"Успешно обработано")
+            return True
+        except Exception as e:
+            # Исключение уже будет залогировано контекстом,
+            # но можно добавить дополнительную информацию
+            app_logger.error(f"Детали ошибки: {e}")
+            return False
+```
+
+> **Важно:** Контекстный менеджер `log.context()` автоматически логирует исключения, поэтому в большинстве случаев `try/except` не требуется. Используйте его только если нужна дополнительная обработка ошибок.

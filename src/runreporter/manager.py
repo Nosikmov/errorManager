@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Iterable, Optional, Tuple
 
 from .email_config import SmtpConfig, NotificationUser
@@ -12,6 +13,7 @@ from .report import (
 	build_report_text_email,
 	build_report_text_telegram,
 	build_log_attachment_bytes,
+	extract_info_messages,
 )
 from .transports import TelegramTransport, EmailTransport
 
@@ -59,6 +61,7 @@ class ErrorManager:
 		self.send_reports_without_errors = send_reports_without_errors
 		self.primary_channel = primary_channel.lower()
 		self._active_run_name: Optional[str] = None
+		self._start_time: Optional[datetime] = None
 
 	def get_logger(self, run_name: Optional[str] = None) -> ErrorTrackingLogger:
 		"""Получить логгер для записи сообщений.
@@ -72,6 +75,7 @@ class ErrorManager:
 		self._active_run_name = run_name
 		# Каждый новый запуск должен начинаться с чистого флага ошибок
 		self.logger.reset_error_flag()
+		self._start_time = datetime.now()
 		return self.logger
 
 	@contextmanager
@@ -110,20 +114,35 @@ class ErrorManager:
 			return (False, False)
 
 	def _send_report(self, run_name: Optional[str]) -> Tuple[bool, bool]:
+		# Вычисляем время выполнения
+		execution_time = None
+		if self._start_time:
+			execution_time = datetime.now() - self._start_time
+		
+		# Читаем лог и извлекаем информационные сообщения
 		log_tail = read_log_tail(self.log_file_path)
+		info_messages = extract_info_messages(self.log_file_path, max_messages=10)
+		
+		# Собираем статистику из логгера
 		summary = RunSummary(
-			run_name=self._logger_name,
+			run_name=run_name or self._logger_name,
 			had_errors=self.logger.had_error,
 			primary_channel=self.primary_channel,
 			sent_to_telegram=False,
 			sent_to_email=False,
+			execution_time=execution_time,
+			tasks_completed=1,  # Задача выполнена (запуск завершен)
+			tasks_with_errors=1 if self.logger.had_error else 0,
+			total_errors=self.logger.error_count,
+			info_messages_count=self.logger.info_count,
+			info_messages=info_messages,
 		)
-		# Приложение логов и подробный текст нужны только при наличии ошибок
-		include_log_tail = summary.had_errors
-		# Для Telegram: если есть вложение, делаем краткий caption без хвоста лога
-		text_tg = build_report_text_telegram(summary, log_tail, include_log_tail=False if include_log_tail else False)
+		
+		# Всегда прикрепляем файл лога (до 300 строк)
+		include_log_tail = True
+		text_tg = build_report_text_telegram(summary, log_tail, include_log_tail=include_log_tail)
 		text_mail = build_report_text_email(summary, log_tail, include_log_tail=include_log_tail)
-		attachment_bytes = build_log_attachment_bytes(log_tail) if include_log_tail else b""
+		attachment_bytes = build_log_attachment_bytes(log_tail)
 
 		sent_tg = False
 		sent_mail = False
@@ -131,17 +150,15 @@ class ErrorManager:
 		def try_send_telegram() -> bool:
 			if not self.tg.enabled:
 				return False
-			# Одно сообщение: либо только текст, либо один документ с caption
-			if include_log_tail:
-				self.tg.send_document(caption=text_tg, filename="log_tail.txt", content_bytes=attachment_bytes)
-			else:
-				self.tg.send_text(text_tg)
+			# Всегда отправляем документ с caption (файл лога до 300 строк)
+			self.tg.send_document(caption=text_tg, filename="log_tail.txt", content_bytes=attachment_bytes)
 			return True
 
 		def try_send_email() -> bool:
 			if not self.mail.enabled:
 				return False
-			attachments = [("log_tail.txt", attachment_bytes, "text/plain")] if include_log_tail else None
+			# Всегда прикрепляем файл лога
+			attachments = [("log_tail.txt", attachment_bytes, "text/plain")]
 			self.mail.send(
 				subject=f"Отчет выполнения: {run_name or ''}",
 				body=text_mail,
@@ -177,8 +194,9 @@ class ErrorManager:
 			ErrorTrackingLogger: Логгер для записи сообщений
 		"""
 		try:
-			# Начинаем новый запуск — сбрасываем флаг ошибок
+			# Начинаем новый запуск — сбрасываем флаг ошибок и запоминаем время старта
 			self.logger.reset_error_flag()
+			self._start_time = datetime.now()
 			yield self.logger
 		except Exception as exc:
 			self.logger.exception(f"Исключение во время выполнения: {exc}")

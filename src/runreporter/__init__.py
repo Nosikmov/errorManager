@@ -11,6 +11,6 @@ __all__ = [
 	"PermanentContextLogger",
 ]
 
-__version__ = "0.3.7"
+__version__ = "0.3.10"
 
 

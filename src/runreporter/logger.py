@@ -24,6 +24,9 @@ class ErrorTrackingLogger:
 		self._logger = logger
 		self._had_error = False
 		self._context_stack: List[str] = []
+		self._info_count = 0
+		self._error_count = 0
+		self._warning_count = 0
 
 	def _mark_error(self) -> None:
 		self._had_error = True
@@ -40,6 +43,24 @@ class ErrorTrackingLogger:
 	def reset_error_flag(self) -> None:
 		"""Сбросить флаг наличия ошибок перед новым запуском."""
 		self._had_error = False
+		self._info_count = 0
+		self._error_count = 0
+		self._warning_count = 0
+	
+	@property
+	def info_count(self) -> int:
+		"""Количество информационных сообщений."""
+		return self._info_count
+	
+	@property
+	def error_count(self) -> int:
+		"""Количество сообщений об ошибках."""
+		return self._error_count
+	
+	@property
+	def warning_count(self) -> int:
+		"""Количество предупреждений."""
+		return self._warning_count
 
 	def _with_ctx(self, msg: str) -> str:
 		if not self._context_stack:
@@ -51,21 +72,26 @@ class ErrorTrackingLogger:
 		self._logger.debug(self._with_ctx(msg), *args, **kwargs)
 
 	def info(self, msg: str, *args, **kwargs) -> None:
+		self._info_count += 1
 		self._logger.info(self._with_ctx(msg), *args, **kwargs)
 
 	def warning(self, msg: str, *args, **kwargs) -> None:
+		self._warning_count += 1
 		self._logger.warning(self._with_ctx(msg), *args, **kwargs)
 
 	def error(self, msg: str, *args, **kwargs) -> None:
 		self._mark_error()
+		self._error_count += 1
 		self._logger.error(self._with_ctx(msg), *args, **kwargs)
 
 	def exception(self, msg: str, *args, exc_info: bool = True, **kwargs) -> None:
 		self._mark_error()
+		self._error_count += 1
 		self._logger.error(self._with_ctx(msg), *args, exc_info=exc_info, **kwargs)
 
 	def critical(self, msg: str, *args, **kwargs) -> None:
 		self._mark_error()
+		self._error_count += 1
 		self._logger.critical(self._with_ctx(msg), *args, **kwargs)
 
 	@contextmanager
@@ -74,6 +100,7 @@ class ErrorTrackingLogger:
 		
 		Все сообщения внутри блока будут помечены указанным контекстом.
 		Контексты могут быть вложенными.
+		Автоматически логирует исключения, если они возникают внутри контекста.
 		
 		Args:
 			name: Имя контекста для пометки сообщений
@@ -84,6 +111,10 @@ class ErrorTrackingLogger:
 		self._context_stack.append(str(name))
 		try:
 			yield self
+		except Exception as exc:
+			# Автоматически логируем исключение с контекстом
+			self.exception(f"Исключение в контексте '{name}': {exc}")
+			raise
 		finally:
 			self._context_stack.pop()
 
