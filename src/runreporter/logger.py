@@ -1,11 +1,15 @@
 import logging
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import List, Optional
 from logging import Logger
 from pathlib import Path
 
 
 _GLOBAL_LOGGER: Optional["ErrorTrackingLogger"] = None
+
+# ContextVar для изоляции стека контекстов в асинхронном коде
+_context_stack_var: ContextVar[List[str]] = ContextVar("_context_stack", default=[])
 
 
 class ErrorTrackingLogger:
@@ -23,10 +27,17 @@ class ErrorTrackingLogger:
 		"""
 		self._logger = logger
 		self._had_error = False
-		self._context_stack: List[str] = []
 		self._info_count = 0
 		self._error_count = 0
 		self._warning_count = 0
+	
+	def _get_context_stack(self) -> List[str]:
+		"""Получить стек контекстов для текущего async контекста."""
+		return _context_stack_var.get()
+	
+	def _set_context_stack(self, stack: List[str]) -> None:
+		"""Установить стек контекстов для текущего async контекста."""
+		_context_stack_var.set(stack)
 
 	def _mark_error(self) -> None:
 		self._had_error = True
@@ -63,9 +74,10 @@ class ErrorTrackingLogger:
 		return self._warning_count
 
 	def _with_ctx(self, msg: str) -> str:
-		if not self._context_stack:
+		context_stack = self._get_context_stack()
+		if not context_stack:
 			return msg
-		ctx = " > ".join(self._context_stack)
+		ctx = " > ".join(context_stack)
 		return f"[{ctx}] {msg}"
 
 	def debug(self, msg: str, *args, **kwargs) -> None:
@@ -101,6 +113,7 @@ class ErrorTrackingLogger:
 		Все сообщения внутри блока будут помечены указанным контекстом.
 		Контексты могут быть вложенными.
 		Автоматически логирует исключения, если они возникают внутри контекста.
+		Использует contextvars для изоляции контекстов в асинхронном коде.
 		
 		Args:
 			name: Имя контекста для пометки сообщений
@@ -108,7 +121,11 @@ class ErrorTrackingLogger:
 		Yields:
 			ErrorTrackingLogger: Текущий логгер с активным контекстом
 		"""
-		self._context_stack.append(str(name))
+		context_stack = self._get_context_stack()
+		# Создаем копию стека для текущего async контекста
+		new_stack = context_stack.copy()
+		new_stack.append(str(name))
+		self._set_context_stack(new_stack)
 		try:
 			yield self
 		except Exception as exc:
@@ -116,7 +133,8 @@ class ErrorTrackingLogger:
 			self.exception(f"Исключение в контексте '{name}': {exc}")
 			raise
 		finally:
-			self._context_stack.pop()
+			# Восстанавливаем предыдущий стек
+			self._set_context_stack(context_stack)
 
 	def with_permanent_context(self, context_name: str, level: Optional[int] = None) -> "PermanentContextLogger":
 		"""Создать логгер с постоянным контекстом.
