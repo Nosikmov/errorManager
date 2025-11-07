@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/runreporter/__init__.py
+src/runreporter/email_config.py
+src/runreporter/logger.py
+src/runreporter/manager.py
+src/runreporter/report.py
+src/runreporter/transports.py
+src/runreporter.egg-info/PKG-INFO
+src/runreporter.egg-info/SOURCES.txt
+src/runreporter.egg-info/dependency_links.txt
+src/runreporter.egg-info/requires.txt
+src/runreporter.egg-info/top_level.txt
