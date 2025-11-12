@@ -15,6 +15,7 @@ class RunSummary:
 	
 	Attributes:
 		run_name: Имя задачи
+		logger_name: Имя приложения/логгера
 		had_errors: Были ли ошибки во время выполнения
 		primary_channel: Приоритетный канал отправки
 		sent_to_telegram: Отправлен ли отчет в Telegram
@@ -31,6 +32,7 @@ class RunSummary:
 	primary_channel: str
 	sent_to_telegram: bool
 	sent_to_email: bool
+	logger_name: Optional[str] = None
 	execution_time: Optional[timedelta] = None
 	tasks_completed: int = 0
 	tasks_with_errors: int = 0
@@ -135,13 +137,25 @@ def build_report_text_email(summary: RunSummary, log_tail: str, include_log_tail
 	parts = [
 		"📊 ОТЧЕТ О ВЫПОЛНЕНИИ",
 		"",
+	]
+	
+	# Добавляем информацию о приложении
+	if summary.logger_name:
+		parts.append(f"📱 Приложение: {summary.logger_name}")
+	
+	# Добавляем имя задачи, если указано
+	if summary.run_name:
+		parts.append(f"📋 Задача: {summary.run_name}")
+	
+	parts.extend([
+		"",
 		f"⏱️ Время выполнения: {format_timedelta(summary.execution_time)}",
 		"",
 		f"✅ Задач выполнено: {summary.tasks_completed}",
 		f"❌ Задач с ошибками: {summary.tasks_with_errors}",
 		f"🚨 Всего ошибок: {summary.total_errors}",
 		f"ℹ️ Информационных сообщений: {summary.info_messages_count}",
-	]
+	])
 	# Добавляем информацию о прикрепленном файле
 	if include_log_tail:
 		parts.extend([
@@ -157,13 +171,25 @@ def build_report_text_telegram(summary: RunSummary, log_tail: str, include_log_t
 	parts = [
 		"<b>📊 ОТЧЕТ О ВЫПОЛНЕНИИ</b>",
 		"",
+	]
+	
+	# Добавляем информацию о приложении
+	if summary.logger_name:
+		parts.append(f"📱 <b>Приложение:</b> {summary.logger_name}")
+	
+	# Добавляем имя задачи, если указано
+	if summary.run_name:
+		parts.append(f"📋 <b>Задача:</b> {summary.run_name}")
+	
+	parts.extend([
+		"",
 		f"⏱️ <b>Время выполнения:</b> {format_timedelta(summary.execution_time)}",
 		"",
 		f"✅ <b>Задач выполнено:</b> {summary.tasks_completed}",
 		f"❌ <b>Задач с ошибками:</b> {summary.tasks_with_errors}",
 		f"🚨 <b>Всего ошибок:</b> {summary.total_errors}",
 		f"ℹ️ <b>Информационных сообщений:</b> {summary.info_messages_count}",
-	]
+	])
 	
 
 	# Добавляем информацию о прикрепленном файле

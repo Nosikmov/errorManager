@@ -126,6 +126,7 @@ class ErrorManager:
 		# Собираем статистику из логгера
 		summary = RunSummary(
 			run_name=run_name or self._logger_name,
+			logger_name=self._logger_name,
 			had_errors=self.logger.had_error,
 			primary_channel=self.primary_channel,
 			sent_to_telegram=False,
